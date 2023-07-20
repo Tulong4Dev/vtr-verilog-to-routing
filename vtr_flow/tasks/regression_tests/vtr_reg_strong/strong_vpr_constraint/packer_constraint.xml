@@ -1,0 +1,7 @@
+<vpr_constraints tool_name="vpr">
+  <packer_constraints>
+    <!-- constraint clock pin to a specific net -->
+    <assignment pin="clb.lclk" net="int_clk_reg_exp_0"/>
+    <!-- assignment pin="clb.clk" net="clk_ni"/-->
+  </packer_constraints>
+</vpr_constraints>

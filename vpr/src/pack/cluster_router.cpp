@@ -247,6 +247,90 @@ static bool check_edge_for_route_conflicts(std::unordered_map<const t_pb_graph_n
  * Routing Functions
  ******************************************************************************************/
 
+/* check if a pin of block is constrained, if yes, process it and return true; else, return false */
+bool process_packer_constraints(t_lb_router_data* router_data, const AtomBlockId blk_id, const AtomPinId pin_id) {
+    auto& atom_ctx = g_vpr_ctx.atom();
+    const t_pb* pb = atom_ctx.lookup.atom_pb(blk_id);
+    VTR_ASSERT(pb);
+
+    // add for debug
+    const t_pb_graph_pin* pb_graph_pin = find_pb_graph_pin(atom_ctx.nlist, atom_ctx.lookup, pin_id);
+    VTR_ASSERT(pb_graph_pin);
+    std::vector<t_intra_lb_net>& lb_nets = *router_data->intra_lb_nets;
+    AtomPortId port_id = atom_ctx.nlist.pin_port(pin_id);
+    AtomNetId net_id = atom_ctx.nlist.pin_net(pin_id);
+
+    if (!net_id) {
+        //No net connected to this pin, so nothing to route
+        return false;
+    }
+
+    // add for debug
+    std::cout << "[DEBUG] add block atom <" << atom_ctx.nlist.block_name(blk_id) << ">" << std::endl; 
+    const t_pb* root_pb = pb->root_pb();
+    std::cout << "[DEBUG]     block name <" << pb->hierarchical_type_name() << ">" << std::endl; 
+    std::cout << "[DEBUG]     root pb name <" << root_pb->pb_graph_node->pb_type->name << ">" << std::endl; 
+    std::cout << "[DEBUG]     root pb hier name <" << root_pb->hierarchical_type_name() << ">" << std::endl; 
+
+
+    /* Find if current net is in route tree, if not, then add to rt.
+    * Code assumes that # of nets in cluster is small so a linear search through
+    * vector is faster than using more complex data structures
+    */
+    bool found = false;
+    unsigned int ipos = 0;
+    for (ipos = 0; ipos < lb_nets.size(); ipos++) {
+        if (lb_nets[ipos].atom_net_id == net_id) {
+            found = true;
+            break;
+        }
+    }
+    if (found == false) {
+        struct t_intra_lb_net new_net;
+        new_net.atom_net_id = net_id;
+
+        ipos = lb_nets.size();
+        lb_nets.push_back(new_net);
+    }
+    VTR_ASSERT(lb_nets[ipos].atom_net_id == net_id);
+    VTR_ASSERT(lb_nets[ipos].atom_pins.size() == lb_nets[ipos].terminals.size());
+
+    // for test
+    std::cout << "[DEBUG]     the pin full name <" << pb_graph_pin->to_string() << ">" << std::endl;
+    std::cout << "[DEBUG]     the port <" << atom_ctx.nlist.port_name(port_id) << ">" << std::endl;
+    std::cout << "[DEBUG]     the net <" << atom_ctx.nlist.net_name(net_id) << ">" << std::endl;
+
+    // check if net is constrained
+    std::string net_name = atom_ctx.nlist.net_name(net_id);
+    PackerConstraint pc = g_vpr_ctx.mutable_clustering().constraints.get_packer_constraint_by_net_name(net_name);
+    if (pc.is_valid()) {
+        std::string constrained_pin_name = pc.pin_name();
+        std::cout << "[DEBUG]     Packer constraint to be applied: " << std::endl;
+        std::cout << "[DEBUG]         Net Name: <" << net_name << ">" << std::endl;
+        std::cout << "[DEBUG]         Pin Name: <" << constrained_pin_name << ">" << std::endl;
+        t_pb_type* root_pb_type = root_pb->pb_graph_node->pb_type;
+        for (int i = 0; i < root_pb_type->num_ports; i++) {
+            std::string root_pb_pin_name = std::string(root_pb_type->name) + std::string(".") + std::string(root_pb_type->ports[i].name); 
+            std::cout << "[DEBUG]     No. <" << i << "> port <" << root_pb_pin_name << "> " << std::endl;
+            // found the constraint match
+            if (root_pb_pin_name == constrained_pin_name) {
+                // do further process:
+                // todo: assign the net to specified port
+                std::cout << "[DEBUG]     find match pin/net packer constraint." << std::endl;
+
+                // to do: set the corrext pin id for this net
+                //        for now, return false to allow caller continue
+                return false;
+
+            }
+        }
+    } else {
+        return false;
+    }
+
+    return true;
+}
+
 /* Add pins of netlist atom to to current routing drivers/targets */
 void add_atom_as_target(t_lb_router_data* router_data, const AtomBlockId blk_id) {
     const t_pb* pb;
@@ -266,7 +350,21 @@ void add_atom_as_target(t_lb_router_data* router_data, const AtomBlockId blk_id)
 
     set_reset_pb_modes(router_data, pb, true);
 
+    // add for debug
+    std::cout << "[DEBUG] add block atom <" << atom_ctx.nlist.block_name(blk_id) << ">" << std::endl; 
+    const t_pb* root_pb = pb->root_pb();
+    std::cout << "[DEBUG]     block name <" << pb->hierarchical_type_name() << ">" << std::endl; 
+    std::cout << "[DEBUG]     root pb name <" << root_pb->pb_graph_node->pb_type->name << ">" << std::endl; 
+    std::cout << "[DEBUG]     root pb hier name <" << root_pb->hierarchical_type_name() << ">" << std::endl; 
+
     for (auto pin_id : atom_ctx.nlist.block_pins(blk_id)) {
+
+        // process pin and its connected net per packer constraint
+        // if processed successfully, don't add to common source/sink for router
+        if (process_packer_constraints(router_data, blk_id, pin_id)) {
+            // continue;
+        }
+
         add_pin_to_rt_terminals(router_data, pin_id);
     }
 
@@ -665,6 +763,12 @@ static void add_pin_to_rt_terminals(t_lb_router_data* router_data, const AtomPin
     VTR_ASSERT(lb_nets[ipos].atom_net_id == net_id);
     VTR_ASSERT(lb_nets[ipos].atom_pins.size() == lb_nets[ipos].terminals.size());
 
+    // for test
+    std::cout << "[DEBUG]     ****** IN BINDING PIN TO ROUTE TERMINAL ******" << std::endl;
+    std::cout << "[DEBUG]     the pin full name <" << pb_graph_pin->to_string() << ">" << std::endl;
+    std::cout << "[DEBUG]     the port <" << atom_ctx.nlist.port_name(port_id) << ">" << std::endl;
+    std::cout << "[DEBUG]     the net <" << atom_ctx.nlist.net_name(net_id) << ">" << std::endl;
+
     /*
      * Determine whether or not this is a new intra lb net, if yes, then add to list of intra lb nets
      */
@@ -672,11 +776,27 @@ static void add_pin_to_rt_terminals(t_lb_router_data* router_data, const AtomPin
         /* Add terminals */
 
         //Default assumption is that the source is outside the current cluster (will be overriden later if required)
+
+        // todo: change the source terminal to the packer constraint pin (e.g. clb.lclk)
+        //       method: get the pin_count_in_cluster of clb.lclk as source terminal, then replace below code
+        //       meanwhile, need to remove line 801 to make sure the assertion does not bother this change
+
         int source_terminal = get_lb_type_rr_graph_ext_source_index(lb_type);
         lb_nets[ipos].terminals.push_back(source_terminal);
 
         AtomPinId net_driver_pin_id = atom_ctx.nlist.net_driver(net_id);
         lb_nets[ipos].atom_pins.push_back(net_driver_pin_id);
+
+        // add for debug
+        t_lb_type_rr_node& source_rr_node = lb_type_graph[lb_nets[ipos].terminals[0]];
+        std::cout << "[DEBUG]         source rr node num of modes <" << source_rr_node.num_modes << ">" << std::endl;
+        t_pb_graph_node* pb_parent_graph_node = pb_graph_pin->parent_node;
+        if (pb_parent_graph_node) {
+            t_pb_type* pb_parent_type_node = pb_parent_graph_node->pb_type;
+            if (pb_parent_type_node) {
+                std::cout << "[DEBUG]         pb parent type node <" << pb_parent_type_node->name << ">" << std::endl;
+            }
+        }
 
         VTR_ASSERT_MSG(lb_type_graph[lb_nets[ipos].terminals[0]].type == LB_SOURCE, "Driver must be a source");
     }

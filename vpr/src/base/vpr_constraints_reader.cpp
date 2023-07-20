@@ -64,6 +64,10 @@ void load_vpr_constraints_files(const char* read_vpr_constraints_name) {
     auto& routing_ctx = g_vpr_ctx.mutable_routing();
     routing_ctx.constraints = reader.constraints_;
 
+    // update vpr constraints for clustering/packer 
+    auto& clustering_ctx = g_vpr_ctx.mutable_clustering();
+    clustering_ctx.constraints = reader.constraints_;
+
     VprConstraints ctx_constraints = floorplanning_ctx.constraints;
 
     if (getEchoEnabled() && isEchoFileEnabled(E_ECHO_VPR_CONSTRAINTS)) {

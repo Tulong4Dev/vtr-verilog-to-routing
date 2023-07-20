@@ -21,7 +21,7 @@ void PackerConstraint::set_pin_name(std::string name) {
 }
 
 std::string PackerConstraint::pin_name() const {
-    return net_name_;
+    return pin_name_;
 }
 
 void PackerConstraint::set_is_valid(bool value) {

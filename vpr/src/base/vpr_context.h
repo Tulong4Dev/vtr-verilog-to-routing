@@ -304,6 +304,12 @@ struct ClusteringContext : public Context {
      */
     std::map<ClusterBlockId, std::map<int, ClusterNetId>> post_routing_clb_pin_nets;
     std::map<ClusterBlockId, std::map<int, int>> pre_routing_net_pin_mapping;
+    
+    /**
+     * @brief Packer constraints, read only
+     */
+    VprConstraints constraints;
+
 };
 
 /**

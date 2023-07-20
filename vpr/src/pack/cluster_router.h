@@ -16,6 +16,7 @@ void free_router_data(t_lb_router_data* router_data);
 void free_intra_lb_nets(std::vector<t_intra_lb_net>* intra_lb_nets);
 
 /* Routing Functions */
+bool process_packer_constraints(t_lb_router_data* router_data, const AtomBlockId blk_id, const AtomPinId pin_id);
 void add_atom_as_target(t_lb_router_data* router_data, const AtomBlockId blk_id);
 void remove_atom_from_target(t_lb_router_data* router_data, const AtomBlockId blk_id);
 void set_reset_pb_modes(t_lb_router_data* router_data, const t_pb* pb, const bool set);

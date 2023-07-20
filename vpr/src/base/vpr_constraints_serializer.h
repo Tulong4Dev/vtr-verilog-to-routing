@@ -471,7 +471,7 @@ class VprConstraintsSerializer final : public uxsd::VprConstraintsBase<VprConstr
         return nullptr;
     }
    
-	virtual inline void preallocate_vpr_constraints_packer_constraints(void*& /*ctx*/, size_t size) final {
+	virtual inline void preallocate_vpr_constraints_packer_constraints(void*& /*ctx*/, size_t /*size*/) final {
         return;
     }
 
@@ -481,7 +481,7 @@ class VprConstraintsSerializer final : public uxsd::VprConstraintsBase<VprConstr
 
 	virtual inline void finish_vpr_constraints_packer_constraints(void*& /*ctx*/) final {
         return;
-    };
+    }
 	virtual inline size_t num_vpr_constraints_packer_constraints(void*& /*ctx*/) final {
         return constraints_.get_packer_constraint_num();
     }
