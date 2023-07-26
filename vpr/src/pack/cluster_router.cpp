@@ -74,7 +74,7 @@ class reservable_pq : public std::priority_queue<T, U, V> {
  ******************************************************************************************/
 static void free_lb_net_rt(t_lb_trace* lb_trace);
 static void free_lb_trace(t_lb_trace* lb_trace);
-static void add_pin_to_rt_terminals(t_lb_router_data* router_data, const AtomPinId pin_id);
+static void add_pin_to_rt_terminals(t_lb_router_data* router_data, const AtomPinId pin_id, const AtomBlockId blk_id);
 static void remove_pin_from_rt_terminals(t_lb_router_data* router_data, const AtomPinId pin_id);
 
 static void fix_duplicate_equivalent_pins(t_lb_router_data* router_data);
@@ -247,8 +247,9 @@ static bool check_edge_for_route_conflicts(std::unordered_map<const t_pb_graph_n
  * Routing Functions
  ******************************************************************************************/
 
-/* check if a pin of block is constrained, if yes, process it and return true; else, return false */
-bool process_packer_constraints(t_lb_router_data* router_data, const AtomBlockId blk_id, const AtomPinId pin_id) {
+/* given a pin to be added for cluster routing, check if the pin is constrained to a specific source pin of the root block of the given block id */
+/* if yes, process it and return true if successfully done so; else, return false */
+bool process_packer_constraints(t_lb_router_data* router_data, const AtomBlockId blk_id, const AtomPinId pin_id, int& constraind_pin_id) {
     auto& atom_ctx = g_vpr_ctx.atom();
     const t_pb* pb = atom_ctx.lookup.atom_pb(blk_id);
     VTR_ASSERT(pb);
@@ -266,12 +267,40 @@ bool process_packer_constraints(t_lb_router_data* router_data, const AtomBlockId
     }
 
     // add for debug
-    std::cout << "[DEBUG] add block atom <" << atom_ctx.nlist.block_name(blk_id) << ">" << std::endl; 
+    std::cout << "[DEBUG] add block atom <" << atom_ctx.nlist.block_name(blk_id) << ">" << std::endl;
     const t_pb* root_pb = pb->root_pb();
-    std::cout << "[DEBUG]     block name <" << pb->hierarchical_type_name() << ">" << std::endl; 
-    std::cout << "[DEBUG]     root pb name <" << root_pb->pb_graph_node->pb_type->name << ">" << std::endl; 
-    std::cout << "[DEBUG]     root pb hier name <" << root_pb->hierarchical_type_name() << ">" << std::endl; 
+    std::cout << "[DEBUG]     block name <" << pb->hierarchical_type_name() << ">" << std::endl;
+    t_pb_graph_node* root_pb_graph_node = root_pb->pb_graph_node;
+    std::cout << "[DEBUG]     root pb name <" << root_pb_graph_node->pb_type->name << ">" << std::endl;
+    std::cout << "[DEBUG]     root pb hier name <" << root_pb->hierarchical_type_name() << ">" << std::endl;
+    const t_pb_graph_pin* pin = nullptr;
+    for(int port_index = 0; port_index < root_pb_graph_node->num_clock_ports; ++port_index) {
+        for(int pin_index = 0; pin_index < root_pb_graph_node->num_clock_pins[port_index]; ++pin_index) {
+            pin = &root_pb_graph_node->clock_pins[port_index][pin_index];
+            std::string port_name = pin->port->name;
+            std::cout << "[DEBUG]            No. <" << pin_index << "> clock pin <" << pin->to_string(false) << "> of port <" << port_name << ">" << std::endl;
+        }
+    }
+    for(int port_index = 0; port_index < root_pb_graph_node->num_input_ports; ++port_index) {
+        for(int pin_index = 0; pin_index < root_pb_graph_node->num_input_pins[port_index]; ++pin_index) {
+            pin = &root_pb_graph_node->input_pins[port_index][pin_index];
+            std::string port_name = pin->port->name;
+            std::cout << "[DEBUG]            No. <" << pin_index << "> input pin <" << pin->to_string() << "> of port <" << port_name << ">" << std::endl;
+        }
+    }
+    for(int port_index = 0; port_index < root_pb_graph_node->num_output_ports; ++port_index) {
+        for(int pin_index = 0; pin_index < root_pb_graph_node->num_output_pins[port_index]; ++pin_index) {
+            pin = &root_pb_graph_node->output_pins[port_index][pin_index];
+            std::string port_name = pin->port->name;
+            std::cout << "[DEBUG]            No. <" << pin_index << "> output pin <" << pin->to_string() << "> of port <" << port_name << ">" << std::endl;
 
+            /*
+            if (top_pb_route.count(pin->pin_count_in_cluster) > 0 && top_pb_route[pin->pin_count_in_cluster].atom_net_id != AtomNetId::INVALID()) {
+                return pin;
+            }
+            */
+        }
+    }
 
     /* Find if current net is in route tree, if not, then add to rt.
     * Code assumes that # of nets in cluster is small so a linear search through
@@ -310,25 +339,27 @@ bool process_packer_constraints(t_lb_router_data* router_data, const AtomBlockId
         std::cout << "[DEBUG]         Pin Name: <" << constrained_pin_name << ">" << std::endl;
         t_pb_type* root_pb_type = root_pb->pb_graph_node->pb_type;
         for (int i = 0; i < root_pb_type->num_ports; i++) {
-            std::string root_pb_pin_name = std::string(root_pb_type->name) + std::string(".") + std::string(root_pb_type->ports[i].name); 
+            std::string root_pb_pin_name = std::string(root_pb_type->name) + std::string(".") + std::string(root_pb_type->ports[i].name);
             std::cout << "[DEBUG]     No. <" << i << "> port <" << root_pb_pin_name << "> " << std::endl;
             // found the constraint match
             if (root_pb_pin_name == constrained_pin_name) {
-                // do further process:
-                // todo: assign the net to specified port
                 std::cout << "[DEBUG]     find match pin/net packer constraint." << std::endl;
 
-                // to do: set the corrext pin id for this net
-                //        for now, return false to allow caller continue
-                return false;
+                t_port port = root_pb_type->ports[i];
+                int abs_first_pin_index = port.absolute_first_pin_index;
+                // todo: how to find the ringht pb_graph_pin connected to this port?
+                //       then, from there, we should be able to find the pin_count_in_cluster
 
+                const t_pb_graph_pin* pb_graph_pin = find_pb_graph_pin(atom_ctx.nlist, atom_ctx.lookup, pin_id);
+                constraind_pin_id = pb_graph_pin->pin_count_in_cluster;
+                std::cout << "[DEBUG]         The pin count in cluster is <" << constraind_pin_id << ">" << std::endl;
+
+                return true;
             }
         }
-    } else {
-        return false;
     }
 
-    return true;
+    return false;
 }
 
 /* Add pins of netlist atom to to current routing drivers/targets */
@@ -351,21 +382,14 @@ void add_atom_as_target(t_lb_router_data* router_data, const AtomBlockId blk_id)
     set_reset_pb_modes(router_data, pb, true);
 
     // add for debug
-    std::cout << "[DEBUG] add block atom <" << atom_ctx.nlist.block_name(blk_id) << ">" << std::endl; 
+    std::cout << "[DEBUG] add block atom <" << atom_ctx.nlist.block_name(blk_id) << ">" << std::endl;
     const t_pb* root_pb = pb->root_pb();
-    std::cout << "[DEBUG]     block name <" << pb->hierarchical_type_name() << ">" << std::endl; 
-    std::cout << "[DEBUG]     root pb name <" << root_pb->pb_graph_node->pb_type->name << ">" << std::endl; 
-    std::cout << "[DEBUG]     root pb hier name <" << root_pb->hierarchical_type_name() << ">" << std::endl; 
+    std::cout << "[DEBUG]     block name <" << pb->hierarchical_type_name() << ">" << std::endl;
+    std::cout << "[DEBUG]     root pb name <" << root_pb->pb_graph_node->pb_type->name << ">" << std::endl;
+    std::cout << "[DEBUG]     root pb hier name <" << root_pb->hierarchical_type_name() << ">" << std::endl;
 
     for (auto pin_id : atom_ctx.nlist.block_pins(blk_id)) {
-
-        // process pin and its connected net per packer constraint
-        // if processed successfully, don't add to common source/sink for router
-        if (process_packer_constraints(router_data, blk_id, pin_id)) {
-            // continue;
-        }
-
-        add_pin_to_rt_terminals(router_data, pin_id);
+        add_pin_to_rt_terminals(router_data, pin_id, blk_id);
     }
 
     fix_duplicate_equivalent_pins(router_data);
@@ -723,7 +747,7 @@ static void free_lb_trace(t_lb_trace* lb_trace) {
 /* Given a pin of a net, assign route tree terminals for it
  * Assumes that pin is not already assigned
  */
-static void add_pin_to_rt_terminals(t_lb_router_data* router_data, const AtomPinId pin_id) {
+static void add_pin_to_rt_terminals(t_lb_router_data* router_data, const AtomPinId pin_id, const AtomBlockId blk_id) {
     std::vector<t_intra_lb_net>& lb_nets = *router_data->intra_lb_nets;
     std::vector<t_lb_type_rr_node>& lb_type_graph = *router_data->lb_type_graph;
     t_logical_block_type_ptr lb_type = router_data->lb_type;
@@ -782,6 +806,13 @@ static void add_pin_to_rt_terminals(t_lb_router_data* router_data, const AtomPin
         //       meanwhile, need to remove line 801 to make sure the assertion does not bother this change
 
         int source_terminal = get_lb_type_rr_graph_ext_source_index(lb_type);
+        // process pin and its connected net per packer constraint
+        // if processed successfully, don't add to common source/sink for router
+        int constrained_source_id = 0;
+        if (process_packer_constraints(router_data, blk_id, pin_id, constrained_source_id)) {
+            source_terminal = constrained_source_id;
+        }
+        std::cout << "[DEBUG]         The source terminal in cluster is <" << source_terminal << ">" << std::endl;
         lb_nets[ipos].terminals.push_back(source_terminal);
 
         AtomPinId net_driver_pin_id = atom_ctx.nlist.net_driver(net_id);
@@ -798,14 +829,14 @@ static void add_pin_to_rt_terminals(t_lb_router_data* router_data, const AtomPin
             }
         }
 
-        VTR_ASSERT_MSG(lb_type_graph[lb_nets[ipos].terminals[0]].type == LB_SOURCE, "Driver must be a source");
+        // VTR_ASSERT_MSG(lb_type_graph[lb_nets[ipos].terminals[0]].type == LB_SOURCE, "Driver must be a source");
     }
 
     VTR_ASSERT(lb_nets[ipos].atom_pins.size() == lb_nets[ipos].terminals.size());
 
     if (atom_ctx.nlist.port_type(port_id) == PortType::OUTPUT) {
         //The current pin is the net driver, overwrite the default driver at index 0
-        VTR_ASSERT_MSG(lb_nets[ipos].terminals[0] == get_lb_type_rr_graph_ext_source_index(lb_type), "Default driver must be external source");
+        // VTR_ASSERT_MSG(lb_nets[ipos].terminals[0] == get_lb_type_rr_graph_ext_source_index(lb_type), "Default driver must be external source");
 
         VTR_ASSERT(atom_ctx.nlist.pin_type(pin_id) == PinType::DRIVER);
 

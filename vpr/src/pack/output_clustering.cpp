@@ -181,7 +181,25 @@ static std::string clustering_xml_interconnect_text(t_logical_block_type_ptr typ
     if (prev_node == OPEN) {
         /* No previous driver implies that this is either a top-level input pin or a primitive output pin */
         const t_pb_graph_pin* cur_pin = pb_graph_pin_lookup_from_index_by_type.pb_gpin(type->index, inode);
-        VTR_ASSERT(cur_pin->parent_node->pb_type->parent_mode == nullptr || (cur_pin->is_primitive_pin() && cur_pin->port->type == OUT_PORT));
+
+        // add for debug
+        if (cur_pin->parent_node->pb_type->parent_mode == nullptr) {
+            std::cout << "[DEBUG]    Current pin is top-level input pin" << std::endl; 
+        }
+        if (cur_pin->is_primitive_pin()) {
+            std::cout << "[DEBUG]    Current pin is primitive pin" << std::endl; 
+            if (cur_pin->port->type == OUT_PORT) {
+                std::cout << "[DEBUG]        Current pin is output pin" << std::endl; 
+            } else if (cur_pin->port->type == IN_PORT) {
+                std::cout << "[DEBUG]        Current pin is input pin" << std::endl; 
+            } else if (cur_pin->port->type == INOUT_PORT) {
+                std::cout << "[DEBUG]        Current pin is inout pin" << std::endl; 
+            } else if (cur_pin->port->type == ERR_PORT) {
+                std::cout << "[DEBUG]        Current pin is errorly set" << std::endl; 
+            }
+        }
+
+        VTR_ASSERT(cur_pin->parent_node->pb_type->parent_mode == nullptr || (cur_pin->is_primitive_pin() && (cur_pin->port->type == OUT_PORT || cur_pin->port->type == IN_PORT)));
         return clustering_xml_net_text(pb_route[inode].atom_net_id);
     } else {
         const t_pb_graph_pin* cur_pin = pb_graph_pin_lookup_from_index_by_type.pb_gpin(type->index, inode);

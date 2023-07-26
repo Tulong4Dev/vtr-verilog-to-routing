@@ -730,6 +730,15 @@ static void processPorts(pugi::xml_node Parent, t_pb* pb, t_pb_routes& pb_route,
                     //
                     //e.g. 'memory.addr1[0]->address1' becomes 'address1'
                     size_t loc = pins[i].find("->");
+
+                    std::cout << "[DEBUG]    Pin[" << i << "] is <" << pins[i] << ">" << std::endl;
+                    if (loc != std::string::npos) {
+                        // should we comment out this since the pin could be top level ext name
+                        // like: int_clk_reg_exp_0 from packer constraint
+                        // add for debug
+                        std::cout << "[DEBUG]   Assersion fails." << std::endl; 
+                    }
+
                     VTR_ASSERT(loc != std::string::npos);
 
                     std::string pin_name = pins[i].substr(0, loc);
