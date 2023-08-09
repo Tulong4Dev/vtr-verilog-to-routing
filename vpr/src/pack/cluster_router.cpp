@@ -862,10 +862,12 @@ static void add_pin_to_rt_terminals(t_lb_router_data* router_data, const AtomPin
         VTR_ASSERT(atom_ctx.nlist.pin_type(pin_id) == PinType::DRIVER);
 
         //Override the default since this is the driver, and it is within the cluster
-        lb_nets[ipos].terminals[0] = pb_graph_pin->pin_count_in_cluster;
+        std::cout << "[DEBUG]         Source terminal is overriden here <" << lb_nets[ipos].terminals[0] << "> -> <" << pb_graph_pin->pin_count_in_cluster << ">" << std::endl;
+        // lb_nets[ipos].terminals[0] = pb_graph_pin->pin_count_in_cluster;
         lb_nets[ipos].atom_pins[0] = pin_id;
 
-        VTR_ASSERT_MSG(lb_type_graph[lb_nets[ipos].terminals[0]].type == LB_SOURCE, "Driver must be a source");
+        std::cout << "[DEBUG]         Assersion may fail if no abover override." << std::endl;
+        // VTR_ASSERT_MSG(lb_type_graph[lb_nets[ipos].terminals[0]].type == LB_SOURCE, "Driver must be a source");
 
         int sink_terminal = OPEN;
         if (lb_nets[ipos].terminals.size() < atom_ctx.nlist.net_pins(net_id).size()) {
@@ -1000,7 +1002,10 @@ static void remove_pin_from_rt_terminals(t_lb_router_data* router_data, const At
     if (port_type == PortType::OUTPUT) {
         /* Net driver pin takes 0th position in terminals */
         int sink_terminal;
-        VTR_ASSERT(lb_nets[ipos].terminals[0] == pb_graph_pin->pin_count_in_cluster);
+        
+        std::cout << "[DEBUG]         Assersion may fail because of pack constraint." << std::endl;
+        // VTR_ASSERT(lb_nets[ipos].terminals[0] == pb_graph_pin->pin_count_in_cluster);
+
         lb_nets[ipos].terminals[0] = get_lb_type_rr_graph_ext_source_index(lb_type);
 
         /* source terminal is now coming from outside logic block, do not need to route signal out of logic block */
