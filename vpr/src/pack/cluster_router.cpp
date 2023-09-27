@@ -320,8 +320,11 @@ bool process_packer_constraints(t_lb_router_data* router_data, const AtomBlockId
     }
 
     // add for debug
-    std::cout << "[DEBUG] add block atom <" << atom_ctx.nlist.block_name(blk_id) << ">" << std::endl;
-    std::cout << "[DEBUG]     block name <" << pb->hierarchical_type_name() << ">" << std::endl;
+    std::cout << "[DEBUG] In process packer constraint: " << std::endl;
+    std::cout << "[DEBUG]     block name <" << atom_ctx.nlist.block_name(blk_id) << ">" << std::endl;
+    std::cout << "[DEBUG]     block hier type name <" << pb->hierarchical_type_name() << ">" << std::endl;
+    std::cout << "[DEBUG]     pin full name <" << pb_graph_pin->to_string() << ">" << std::endl;
+    std::cout << "[DEBUG]     net name <" << atom_ctx.nlist.net_name(net_id) << ">" << std::endl;
     std::cout << "[DEBUG]     root pb name <" << root_pb_graph_node->pb_type->name << ">" << std::endl;
     std::cout << "[DEBUG]     root pb hier name <" << root_pb->hierarchical_type_name() << ">" << std::endl;
 
@@ -831,7 +834,8 @@ static void add_pin_to_rt_terminals(t_lb_router_data* router_data, const AtomPin
         // if processed successfully, don't add to common source/sink for router
         int constrained_source_id = 0;
         if (process_packer_constraints(router_data, blk_id, pin_id, constrained_source_id)) {
-            source_terminal = constrained_source_id;
+            std::cout << "[DEBUG]         The source terminal update disabled." << std::endl;
+            // source_terminal = constrained_source_id;
         }
         std::cout << "[DEBUG]         The source terminal in cluster is <" << source_terminal << ">" << std::endl;
         lb_nets[ipos].terminals.push_back(source_terminal);
@@ -857,17 +861,18 @@ static void add_pin_to_rt_terminals(t_lb_router_data* router_data, const AtomPin
 
     if (atom_ctx.nlist.port_type(port_id) == PortType::OUTPUT) {
         //The current pin is the net driver, overwrite the default driver at index 0
-        // VTR_ASSERT_MSG(lb_nets[ipos].terminals[0] == get_lb_type_rr_graph_ext_source_index(lb_type), "Default driver must be external source");
+        std::cout << "[DEBUG]         Source terminal is asserted here <" << lb_nets[ipos].terminals[0] << "> -> <" << pb_graph_pin->pin_count_in_cluster << ">" << std::endl;
+        VTR_ASSERT_MSG(lb_nets[ipos].terminals[0] == get_lb_type_rr_graph_ext_source_index(lb_type), "Default driver must be external source");
 
         VTR_ASSERT(atom_ctx.nlist.pin_type(pin_id) == PinType::DRIVER);
 
         //Override the default since this is the driver, and it is within the cluster
         std::cout << "[DEBUG]         Source terminal is overriden here <" << lb_nets[ipos].terminals[0] << "> -> <" << pb_graph_pin->pin_count_in_cluster << ">" << std::endl;
-        // lb_nets[ipos].terminals[0] = pb_graph_pin->pin_count_in_cluster;
+        lb_nets[ipos].terminals[0] = pb_graph_pin->pin_count_in_cluster;
         lb_nets[ipos].atom_pins[0] = pin_id;
 
         std::cout << "[DEBUG]         Assersion may fail if no abover override." << std::endl;
-        // VTR_ASSERT_MSG(lb_type_graph[lb_nets[ipos].terminals[0]].type == LB_SOURCE, "Driver must be a source");
+        VTR_ASSERT_MSG(lb_type_graph[lb_nets[ipos].terminals[0]].type == LB_SOURCE, "Driver must be a source");
 
         int sink_terminal = OPEN;
         if (lb_nets[ipos].terminals.size() < atom_ctx.nlist.net_pins(net_id).size()) {
@@ -1004,7 +1009,7 @@ static void remove_pin_from_rt_terminals(t_lb_router_data* router_data, const At
         int sink_terminal;
         
         std::cout << "[DEBUG]         Assersion may fail because of pack constraint." << std::endl;
-        // VTR_ASSERT(lb_nets[ipos].terminals[0] == pb_graph_pin->pin_count_in_cluster);
+        VTR_ASSERT(lb_nets[ipos].terminals[0] == pb_graph_pin->pin_count_in_cluster);
 
         lb_nets[ipos].terminals[0] = get_lb_type_rr_graph_ext_source_index(lb_type);
 
